@@ -1,0 +1,25 @@
+# Smithery configuration — https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  type: stdio
+
+configSchema:
+  type: object
+  required: []
+  properties:
+    apiKey:
+      type: string
+      description: >
+        Swarmrails API key. Leave blank to use free test mode.
+        Format for real payments: "macaroon:0xYOUR_TX_HASH"
+      default: ""
+
+commandFunction: |-
+  (config) => ({
+    command: "npx",
+    args: ["-y", "swarmrails-mcp"],
+    env: config.apiKey ? { SWARMRAILS_API_KEY: config.apiKey } : {}
+  })
+
+exampleConfig:
+  apiKey: ""
