@@ -368,6 +368,35 @@ async function main() {
         res.on("close", () => transport.close());
         await buildServer().connect(transport);
         await transport.handleRequest(req, res);
+      } else if (req.method === "POST" && req.url === "/rapidapi") {
+        // RapidAPI proxy endpoint — validates RapidAPI secret, forwards to gateway
+        const rapidSecret = process.env.RAPIDAPI_PROXY_SECRET;
+        if (rapidSecret && req.headers["x-rapidapi-proxy-secret"] !== rapidSecret) {
+          res.writeHead(403, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Forbidden" }));
+          return;
+        }
+        let body = "";
+        req.on("data", (chunk) => (body += chunk));
+        req.on("end", async () => {
+          try {
+            const parsed = JSON.parse(body);
+            const gwRes = await fetch(GATEWAY_URL, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `x402 ${API_KEY}`,
+              },
+              body: JSON.stringify(parsed),
+            });
+            const data = await gwRes.json();
+            res.writeHead(gwRes.status, { "Content-Type": "application/json" });
+            res.end(JSON.stringify(data));
+          } catch (err) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Internal error" }));
+          }
+        });
       } else if (req.url === "/health") {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ status: "ok", tools: TOOLS.length }));
