@@ -12,7 +12,7 @@ const GATEWAY_URL =
 
 // Use env var or fall back to test mode
 const API_KEY =
-  process.env.SWARMRAILS_API_KEY ?? "test_mode:swarmrails_test_2026";
+  process.env.SWARMRAILS_API_KEY ?? "test_mode:sharpsignal_test_2026";
 
 async function callGateway(body: Record<string, unknown>): Promise<unknown> {
   const res = await fetch(GATEWAY_URL, {
@@ -259,38 +259,38 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       // ── sync subnets ──────────────────────────────────────────────────────
       case "bittensor_text":
-        result = await callGateway({ netuid: 1, prompt: a.prompt });
+        result = await callGateway({ route: "bittensor-text", prompt: a.prompt });
         break;
       case "bittensor_translate":
-        result = await callGateway({ netuid: 3, prompt: a.prompt });
+        result = await callGateway({ route: "bittensor-translate", prompt: a.prompt });
         break;
       case "bittensor_reasoning":
-        result = await callGateway({ netuid: 4, prompt: a.prompt });
+        result = await callGateway({ route: "bittensor-reasoning", prompt: a.prompt });
         break;
       case "bittensor_image":
-        result = await callGateway({ netuid: 5, prompt: a.prompt });
+        result = await callGateway({ route: "bittensor-image", prompt: a.prompt });
         break;
       case "bittensor_llm":
-        result = await callGateway({ netuid: 6, prompt: a.prompt });
+        result = await callGateway({ route: "bittensor-llm", prompt: a.prompt });
         break;
       case "bittensor_forecast":
-        result = await callGateway({ netuid: 8, prompt: a.prompt });
+        result = await callGateway({ route: "bittensor-forecast", prompt: a.prompt });
         break;
       case "bittensor_code":
-        result = await callGateway({ netuid: 11, prompt: a.prompt });
+        result = await callGateway({ route: "bittensor-code", prompt: a.prompt });
         break;
       case "bittensor_data":
-        result = await callGateway({ netuid: 13, prompt: a.prompt });
+        result = await callGateway({ route: "bittensor-data", prompt: a.prompt });
         break;
       case "bittensor_tts":
-        result = await callGateway({ netuid: 16, prompt: a.prompt });
+        result = await callGateway({ route: "bittensor-tts", prompt: a.prompt });
         break;
       case "bittensor_scrape":
-        result = await callGateway({ netuid: 21, prompt: a.prompt });
+        result = await callGateway({ route: "bittensor-scrape", prompt: a.prompt });
         break;
       case "bittensor_multimodal":
         result = await callGateway({
-          netuid: 24,
+          route: "bittensor-multimodal",
           prompt: a.prompt,
           ...(a.image_url ? { image_url: a.image_url } : {}),
         });
@@ -298,7 +298,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       // ── async subnets (submit → poll) ─────────────────────────────────────
       case "bittensor_video": {
-        const job = (await callGateway({ netuid: 18, prompt: a.prompt })) as Record<string, unknown>;
+        const job = (await callGateway({ route: "bittensor-video", prompt: a.prompt })) as Record<string, unknown>;
         if (job.status === "pending" && typeof job.job_id === "string") {
           result = await pollJob(job.job_id);
         } else {
@@ -307,9 +307,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case "bittensor_3d": {
+        // For 3D, image_url is the actual input — pass as both prompt and image_url
+        // Gateway uses image_url || prompt for fal async routes
         const job = (await callGateway({
-          netuid: 29,
-          prompt: a.prompt,
+          route: "bittensor-3d",
+          prompt: a.image_url,
           image_url: a.image_url,
         })) as Record<string, unknown>;
         if (job.status === "pending" && typeof job.job_id === "string") {
