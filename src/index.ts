@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
+import http from "node:http";
 
 const GATEWAY_URL =
   "https://xosljjzcpsouwifbclsy.supabase.co/functions/v1/payment_gate";
@@ -240,16 +242,18 @@ const TOOLS: Tool[] = [
   },
 ];
 
-// ─── Server setup ────────────────────────────────────────────────────────────
+// ─── Server factory ───────────────────────────────────────────────────────────
+// Called once for stdio, or per-request for HTTP (MCP spec requires fresh
+// server instance per stateless HTTP session when sessionIdGenerator=undefined)
 
-const server = new Server(
-  { name: "swarmrails", version: "1.0.0" },
-  { capabilities: { tools: {} } }
-);
+function buildServer(): Server {
+  const s = new Server(
+    { name: "swarmrails", version: "1.0.0" },
+    { capabilities: { tools: {} } }
+  );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  s.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+  s.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   const a = (args ?? {}) as Record<string, string>;
 
@@ -344,14 +348,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       isError: true,
     };
   }
-});
+  });
+
+  return s;
+}
 
 // ─── Start ───────────────────────────────────────────────────────────────────
 
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Swarmrails MCP server running");
+  const port = process.env.PORT ? parseInt(process.env.PORT) : undefined;
+
+  if (port) {
+    // HTTP mode — for Railway / Smithery hosted deployment
+    const httpServer = http.createServer(async (req, res) => {
+      if (req.method === "POST" && req.url === "/mcp") {
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: undefined,
+        });
+        res.on("close", () => transport.close());
+        await buildServer().connect(transport);
+        await transport.handleRequest(req, res);
+      } else if (req.url === "/health") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status: "ok", tools: TOOLS.length }));
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    httpServer.listen(port, () => {
+      console.error(`Swarmrails MCP server listening on port ${port}`);
+    });
+  } else {
+    // Stdio mode — for local Claude Desktop / Claude Code
+    const transport = new StdioServerTransport();
+    await buildServer().connect(transport);
+    console.error("Swarmrails MCP server running (stdio)");
+  }
 }
 
 main().catch((err) => {
